@@ -1,0 +1,54 @@
+function [X, U, final_cost, X_hist_ilqr, U_hist_ilqr] = run_iLQR_admm_wrapper(X_init, U_init, x_ref, dt, L, weights, options, admm_data)
+X = X_init;
+U = U_init;
+
+X_hist_ilqr = zeros(size(X,1), size(X,2), options.max_ilqr_iter);
+U_hist_ilqr = zeros(size(U,1), size(U,2), options.max_ilqr_iter);
+actual_iters = 0;
+
+for iter = 1:options.max_ilqr_iter
+    % Backward Pass (传入 admm_data)
+    % 注意: backward_pass 函数需要对应更新接口
+    % tic;
+    [k_list, K_list, success] = backward_pass_admm(X, U, x_ref, weights, dt, L, admm_data);
+    % backward_time = toc;
+    % fprintf('  Backward Pass Time: %.4f s\n', backward_time);
+
+    if ~success
+        % 如果失败，通常意味着正则化都没救回来，直接退出当前 iLQR
+        break;
+    end
+
+    % tic;
+    % Forward Pass (传入 admm_data 用于计算 Line Search 的 Cost)
+    [X_new, U_new, cost_new] = forward_pass_admm(X, U, k_list, K_list, x_ref, weights, dt, L, admm_data);
+    % forward_time = toc;
+    % fprintf('  Forward Pass Time: %.4f s\n', forward_time);
+
+    % 简单的 Cost 变化检查
+    % 这里为了节省计算，可以简化。如果是第一步，没有 old cost，怎么比？
+    % 通常我们在循环外算一次 initial cost。
+    if iter == 1
+        current_cost = calculate_total_cost_admm(X, U, x_ref, weights, admm_data);
+    end
+
+    cost_change = abs(current_cost - cost_new);
+    u_change = norm(U_new - U);
+
+    X = X_new;
+    U = U_new;
+    current_cost = cost_new;
+
+    actual_iters = actual_iters + 1;
+    X_hist_ilqr(:, :, actual_iters) = X;
+    U_hist_ilqr(:, :, actual_iters) = U;
+
+    if cost_change < options.ilqr_tol && u_change < options.ilqr_tol
+        fprintf('iLQR converged at iteration %d: Cost = %.4f, U_change = %.4f\n', iter, cost_new, u_change);
+        X_hist_ilqr = X_hist_ilqr(:, :, 1:actual_iters);
+        U_hist_ilqr = U_hist_ilqr(:, :, 1:actual_iters);
+        break;
+    end
+end
+final_cost = current_cost;
+end
