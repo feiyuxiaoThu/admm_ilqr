@@ -55,7 +55,7 @@ for j = 1:num_obs
 
     % 检查是否有动态预测轨迹
     % 假设结构: obs.prediction.trajectory (3 x M) -> [x; y; theta]
-    is_dynamic = isfield(obs, 'prediction');
+    is_dynamic = isfield(obs, 'prediction') && ~isempty(obs.prediction);
 
     % ==========================================
     % 内层循环：遍历时间步 (逐点处理，非矩阵化)
@@ -137,7 +137,7 @@ for j = 1:num_obs
         %% 绘图调试用 (严格保留你的代码结构)
         % figure('Position', [100, 100, 1200, 600]); hold on; axis equal; 
         % plot(pt_global(1), pt_global(2), 'rx', 'MarkerSize', 10, 'LineWidth', 2, 'DisplayName', 'Colliding Point');
-        % 定义单位圆用于变换
+        % % 定义单位圆用于变换
         % theta_circle = linspace(0, 2*pi, 100);
         % circle_x = cos(theta_circle);
         % circle_y = sin(theta_circle);
@@ -224,7 +224,21 @@ for j = 1:num_obs
     end % end k loop
 end % end obs loop
 
-% 3. 应用合力
-z_x = y_x + total_shift;
+% 3. 应用合力并执行道路边界截断 (Strategy B)
+
+% 先应用避障推力
+z_x_temp = y_x + total_shift;
+
+% 再执行硬截断
+if isfield(constraints, 'road_bounds') && ~isempty(constraints.road_bounds)
+    y_min = constraints.road_bounds(1);
+    y_max = constraints.road_bounds(2);
+    
+    % 对 Y 轴 (第2行) 进行 Clamp
+    % 逻辑: max(y_min, min(y_max, val))
+    z_x_temp(2, :) = max(y_min, min(y_max, z_x_temp(2, :)));
+end
+
+z_x = z_x_temp;
 
 end

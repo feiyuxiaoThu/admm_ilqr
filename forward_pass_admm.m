@@ -1,4 +1,4 @@
-function [X_new, U_new, cost_new] = forward_pass_admm(X_old, U_old, k_list, K_list, x_ref_traj, weights, dt, L, admm_data)
+function [X_new, U_new, cost_new, cost_old] = forward_pass_admm(X_old, U_old, k_list, K_list, x_ref_traj, weights, dt, L, admm_data)
 N = size(U_old, 2);
 nx = 4;
 nu = 2;

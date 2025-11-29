@@ -1,4 +1,4 @@
-function [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, x_ref_traj, constraints, dt, L, weights, options)
+function [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, candidate, constraints, dt, L, weights, options)
 % RUN_ADMM_ILQR 执行基于ADMM的约束iLQR算法 (论文 Algorithm 1)
 %
 % 输入:
@@ -20,11 +20,14 @@ if ~isfield(options, 'max_ilqr_iter'), options.max_ilqr_iter = 100; end
 if ~isfield(options, 'sigma'), options.sigma = 10.0; end
 if ~isfield(options, 'tol_admm'), options.tol_admm = 1e-3; end
 
+x_ref_traj = candidate.x_ref;
+acc_ref = candidate.acc;
+
 N = size(x_ref_traj, 2) - 1;
 sigma = options.sigma;
 
 % 初始化轨迹 (Algorithm 1, Line 1)
-[X_init, U_init] = generate_initial_trajectory(x0, x_ref_traj, N, dt, L, constraints);
+[X_init, U_init] = generate_initial_trajectory(x0, x_ref_traj, N, dt, L, constraints, acc_ref);
 X = X_init;
 U = U_init;
 

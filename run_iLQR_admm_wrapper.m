@@ -21,7 +21,7 @@ for iter = 1:options.max_ilqr_iter
 
     % tic;
     % Forward Pass (传入 admm_data 用于计算 Line Search 的 Cost)
-    [X_new, U_new, cost_new] = forward_pass_admm(X, U, k_list, K_list, x_ref, weights, dt, L, admm_data);
+    [X_new, U_new, cost_new, cost_old] = forward_pass_admm(X, U, k_list, K_list, x_ref, weights, dt, L, admm_data);
     % forward_time = toc;
     % fprintf('  Forward Pass Time: %.4f s\n', forward_time);
 
@@ -29,7 +29,7 @@ for iter = 1:options.max_ilqr_iter
     % 这里为了节省计算，可以简化。如果是第一步，没有 old cost，怎么比？
     % 通常我们在循环外算一次 initial cost。
     if iter == 1
-        current_cost = calculate_total_cost_admm(X, U, x_ref, weights, admm_data);
+        current_cost = cost_old;
     end
 
     cost_change = abs(current_cost - cost_new);

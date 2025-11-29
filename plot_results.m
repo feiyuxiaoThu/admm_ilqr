@@ -1,9 +1,9 @@
 % Helper: plotting
-function plot_results(X, U, X_ref, dt, scenario_id, constraints)
+function plot_results(X, U, X_ref, dt, candidate_id, constraints)
 t = 0:dt:(size(X,2)-1)*dt;
 t_u = 0:dt:(size(U,2)-1)*dt;
 
-figure('Name', ['Scenario ' num2str(scenario_id)], 'Color', 'w', 'Position', [100, 100, 1200, 600]);
+figure('Name', ['Candidate' num2str(candidate_id)], 'Color', 'w', 'Position', [100, 100, 1200, 600]);
 
 % 1. trajectory (X-Y)
 subplot(2, 3, [1, 4]);

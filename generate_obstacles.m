@@ -33,6 +33,7 @@ for i = 1:length(raw_obs_list)
 
     if (norm([raw.vx; raw.vy]) < 1e-3)
         % 静止障碍物
+       obs.prediction = [];
        obstacles = [obstacles, obs];
        continue;
     end
