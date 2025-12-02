@@ -1,4 +1,4 @@
-function [scenario, constraints, x0] = build_simulation_scenario(dt, N)
+function [scenario, constraints, x0, raw_obs_list] = build_simulation_scenario(dt, N)
 % BUILD_SIMULATION_SCENARIO 构建三车道动静态障碍物场景
 % (增加了道路边界定义)
 
@@ -11,7 +11,7 @@ function [scenario, constraints, x0] = build_simulation_scenario(dt, N)
     
     % --- 2. 自车初始状态 ---
     % 位于中车道，速度 10/s
-    x0 = [0.0; 0.0; 0.0; 8.0];
+    x0 = [0.0; 0.0; 0.0; 10.0];
     
     % 自车尺寸
     ego_size.length = 4.5;
@@ -32,9 +32,9 @@ function [scenario, constraints, x0] = build_simulation_scenario(dt, N)
     
     % --- 4. 障碍物生成 ---
     % Obs 1: 中车道前方慢车
-    obs1 = struct('x', 20.0, 'y', 0.0, 'length', 4.5, 'width', 2.0, 'theta', 0.0, 'vx', 3.0, 'vy', 0.0);
+    obs1 = struct('x', 40.0, 'y', 0.0, 'length', 4.5, 'width', 2.0, 'theta', 0.0, 'vx', 6.0, 'vy', 0.0);
     % Obs 2: 左车道并行
-    obs2 = struct('x', 10.0, 'y', 4.0, 'length', 4.5, 'width', 2.0, 'theta', 0.0, 'vx', 8.0, 'vy', 0.0);
+    obs2 = struct('x', 5.0, 'y', 4.0, 'length', 4.5, 'width', 2.0, 'theta', 0.0, 'vx', 8.0, 'vy', 0.0);
     % Obs 3: 右车道前方
     obs3 = struct('x', 60.0, 'y', -4.0, 'length', 4.5, 'width', 2.0, 'theta', 0.0, 'vx', 0.0, 'vy', 0.0);
     
@@ -46,5 +46,5 @@ function [scenario, constraints, x0] = build_simulation_scenario(dt, N)
     constraints.u_max = [ 2.0;  0.5]; 
     
     % 场景元数据
-    scenario.v_desired = 10.0; 
+    scenario.v_desired = 20.0; 
 end

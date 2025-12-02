@@ -11,7 +11,7 @@ function plot_results_multimodal(results, best_idx, constraints, scenario, dt)
     % 创建图形窗口，保持较大的尺寸
     figure;
     set(gcf, 'Name', 'Parallel Homotopic Trajectory Optimization Results', ...
-             'Color', 'w', 'Position', [50, 50, 1600, 900]); %稍微加大一点窗口
+             'Color', 'w', 'Position', [50, 50, 1600, 800]); %稍微加大一点窗口
     
     % 获取时间向量
     if isempty(results), return; end
@@ -71,7 +71,7 @@ function plot_results_multimodal(results, best_idx, constraints, scenario, dt)
             R = [cos(obs.theta), -sin(obs.theta); sin(obs.theta), cos(obs.theta)];
             rotated = R * [scale_x; scale_y];
             final_x = rotated(1, :) + obs.x; final_y = rotated(2, :) + obs.y;
-            
+            draw_car_box(obs.x, obs.y, obs.theta, obs.length, obs.width, [1, 0.6, 0.6], 0.1);
             fill(final_x, final_y, [1, 0.8, 0.8], 'EdgeColor', 'r', 'FaceAlpha', 0.5, ...
                 'DisplayName', sprintf('Obs %d', i));
         end

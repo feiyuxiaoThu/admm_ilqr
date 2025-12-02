@@ -44,7 +44,7 @@ for iter = 1:options.max_ilqr_iter
     U_hist_ilqr(:, :, actual_iters) = U;
 
     if cost_change < options.ilqr_tol && u_change < options.ilqr_tol
-        fprintf('iLQR converged at iteration %d: Cost = %.4f, U_change = %.4f\n', iter, cost_new, u_change);
+        % fprintf('iLQR converged at iteration %d: Cost = %.4f, U_change = %.4f\n', iter, cost_new, u_change);
         X_hist_ilqr = X_hist_ilqr(:, :, 1:actual_iters);
         U_hist_ilqr = U_hist_ilqr(:, :, 1:actual_iters);
         break;

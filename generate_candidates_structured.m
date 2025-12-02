@@ -79,7 +79,7 @@ for offset = search_offsets
     
     % 添加候选
     candidates = add_candidate(candidates, cand_id, ...
-        [lat_action, '_Cruise'], traj_cruise, acc_cruise, v_desired);
+        [lat_action, '_Cruise'], traj_cruise, acc_cruise, v_desired, target_lane_idx);
     cand_id = cand_id + 1;
     
     % ===========================================================
@@ -115,7 +115,7 @@ for offset = search_offsets
             % 如果最终位置 p > p_lead - safe_dist，后续 ADMM 的 safe cost 会惩罚它。
             
             candidates = add_candidate(candidates, cand_id, ...
-                [lat_action, '_Follow_V'], traj_follow, acc_follow, target_v);
+                [lat_action, '_Follow_V'], traj_follow, acc_follow, target_v, target_lane_idx);
             cand_id = cand_id + 1;
             
         else
@@ -152,7 +152,7 @@ for offset = search_offsets
                 % close all;
                 
                 candidates = add_candidate(candidates, cand_id, ...
-                    [lat_action, '_Stop'], traj_stop, acc_stop, 0);
+                    [lat_action, '_Stop'], traj_stop, acc_stop, 0, target_lane_idx);
                 cand_id = cand_id + 1;
             end
         end
@@ -188,12 +188,13 @@ for i = 1:length(obstacles)
 end
 end
 
-function new_list = add_candidate(list, id, name, traj, acc, v_tgt)
+function new_list = add_candidate(list, id, name, traj, acc, v_tgt, lane_id)
 c.id = id;
 c.name = name;
 c.x_ref = traj; % [x; y; theta; v] (4xN)
 c.v_target = v_tgt; % 用于 Initial Guess
 c.acc = acc; % 纵向加速度
+c.target_lane_id = lane_id;
 
 if isempty(list)
     new_list = c;

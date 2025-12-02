@@ -23,9 +23,10 @@ for i = 1:length(raw_obs_list)
     % 1. 几何膨胀 (Minkowski Sum 近似)
     % 椭圆半长轴 a = (障碍长 + 自车长) / 2 + 安全余量
     % 椭圆半短轴 b = (障碍宽 + 自车宽) / 2 + 安全余量
-    safe_margin = 0.5; % 额外的安全距离 (m)
-    obs.a = (raw.length + ego_size.length) / 2.0 + safe_margin;
-    obs.b = (raw.width  + ego_size.width)  / 2.0 + safe_margin;
+    safe_margin_lon = 3.0; % 额外的安全距离 (m)
+    safe_margin_lat = 0.8;
+    obs.a = (raw.length + ego_size.length) / 2.0 + safe_margin_lon;
+    obs.b = (raw.width  + ego_size.width)  / 2.0 + safe_margin_lat;
     
     % 2. 轨迹预测 (Constant Velocity Model)
     % 生成 2 x N 的矩阵，表示未来 t = 0 到 t = (N-1)*dt 的位置

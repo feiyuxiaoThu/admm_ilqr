@@ -1,4 +1,4 @@
-function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, obstacles, last_best_id, scenario_params, eval_weights)
+function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, obstacles, last_best_target_lane_id, scenario_params, eval_weights)
 % EVALUATE_TRAJECTORIES 轨迹评分与择优模块
 %
 % 逻辑:
@@ -8,7 +8,7 @@ function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, ob
 % 输入:
 %   results: 结构体数组, 包含 .X, .U, .valid, .cand
 %   obstacles: 障碍物结构体 (含 .prediction)
-%   last_best_id: 上一帧选中的 candidate id (用于一致性奖励)
+%   last_best_target_lane_id: 上一帧选中的目标车道ID (用于一致性奖励)
 %   scenario_params: 含 .v_desired (全局期望速度)
 %   eval_weights: 权重结构体
 %
@@ -80,12 +80,15 @@ function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, ob
         
         J_comfort = eval_weights.w_acc * acc_sq + ...
                     eval_weights.w_steer * steer_sq + ...
-                    eval_weights.w_jerk * (jerk_lon + jerk_lat);
+                    eval_weights.w_jerk_lon * jerk_lon + ...
+                    eval_weights.w_jerk_lat * jerk_lat;
 
         % D. 一致性代价 (Consistency)
         J_consistency = 0;
-        if last_best_id ~= -1 && cand.id ~= last_best_id
-            J_consistency = eval_weights.w_consistency;
+        if last_best_target_lane_id ~= -1
+            if cand.target_lane_id ~= last_best_target_lane_id
+                J_consistency = eval_weights.w_consistency;
+            end
         end
 
         % --- 3. 总分汇总 ---
@@ -94,7 +97,7 @@ function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, ob
                       J_comfort + ...
                       J_consistency;
 
-        record_debug(i, true, J_safety, J_progress, J_comfort, J_consistency, total_score);
+        debug_scores = record_debug(i, true, J_safety, J_progress, J_comfort, J_consistency, total_score, debug_scores);
 
         % 更新最优
         if total_score < best_cost
@@ -104,7 +107,7 @@ function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, ob
     end
     
     % --- 内部辅助函数: 记录调试信息 ---
-    function record_debug(id, valid, s, p, c, con, tot)
+    function debug_scores = record_debug(id, valid, s, p, c, con, tot, debug_scores)
         debug_scores(id).id = id;
         debug_scores(id).valid = valid;
         debug_scores(id).J_safe = s;

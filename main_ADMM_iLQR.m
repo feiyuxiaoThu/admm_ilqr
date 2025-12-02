@@ -6,7 +6,7 @@ close all;
 dt = 0.1;           % time step (s)
 L = 3.0;            % wheelbase (m)
 v_target = 10.0;    % target speed (m/s)
-total_time = 8.0;   % total simulation time (s)
+total_time = 6.0;   % total simulation time (s)
 N = floor(total_time / dt);
 
 % Weights
@@ -24,17 +24,18 @@ weights.r_delta_steer = 10.0;
 % 轨迹评估权重 (Evaluator Weights)
 % 这些权重用于从并行优化的结果中选出最佳轨迹
 % 注意：这与 iLQR 内部的优化权重不同，这是决策层的权重
-eval_weights.w_safety      = 10.0;  % 安全裕度权重 (很高，哪怕侵入一点警戒区也要重罚)
-eval_weights.w_progress    = 1.0;   % 行驶距离奖励 (越大越倾向于跑得快)
+eval_weights.w_safety      = 2.0;  % 安全裕度权重 (很高，哪怕侵入一点警戒区也要重罚)
+eval_weights.w_progress    = 10.0;   % 行驶距离奖励 (越大越倾向于跑得快)
 eval_weights.w_ref_vel     = 0.5;   % 速度误差惩罚 (越大越倾向于维持限速)
 eval_weights.w_acc         = 0.1;   % 加速度惩罚 (舒适性)
-eval_weights.w_steer       = 0.1;   % 转向惩罚
-eval_weights.w_jerk        = 0.5;   % Jerk 惩罚 (平滑性)
-eval_weights.w_consistency = 2.0;   % 决策一致性 (防止在 Keep 和 Change 之间频繁跳变)
+eval_weights.w_steer       = 100.0;   % 转向惩罚
+eval_weights.w_jerk_lon    = 0.1;
+eval_weights.w_jerk_lat    = 100.0;
+eval_weights.w_consistency = 500.0;   % 决策一致性 (防止在 Keep 和 Change 之间频繁跳变)
 % 初始化上一帧的最佳 ID
 last_best_id = -1;
 
-% iLQR parameters
+% ADMM-iLQR parameters
 options.max_admm_iter = 10;     % ADMM 最大迭代次数
 options.sigma = 10.0;           % ADMM 惩罚参数 (初始)
 options.tol_admm = 1e-1;        % ADMM 收敛容差
@@ -54,15 +55,20 @@ fprintf('Generated %d candidate trajectories.\n', length(candidates));
 results = struct();
 tic;
 parfor i = 1:length(candidates) % 开启并行
-    % for i = 1:length(candidates) % 调试时用 for
+% for i = 1:length(candidates)
     fprintf('Optimizing Candidate %d: %s (Target V=%.2f)\n', ...
         candidates(i).id, candidates(i).name, candidates(i).v_target);
+    % tic;
     [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, candidates(i), constraints, dt, L, weights, options);
+    % elapsed = toc;
+    % fprintf('  Candidate %d optimized in %.4f s. Final Cost: %.4f\n', ...
+    %     candidates(i).id, elapsed, debug_info.cost_history(end));
     results(i).X = X_opt;
     results(i).U = U_opt;
     results(i).cost = debug_info.cost_history(end);
     results(i).cand = candidates(i);
     results(i).debug_info = debug_info;
+    % results(i).time_cost = elapsed;
 end
 total_time = toc;
 fprintf('All candidates optimized. Total time: %.4f s\n', total_time);

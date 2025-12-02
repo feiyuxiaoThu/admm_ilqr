@@ -1,4 +1,4 @@
-function [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, candidate, constraints, dt, L, weights, options)
+function [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, candidate, constraints, dt, L, weights, options, warm_start_U)
 % RUN_ADMM_ILQR 执行基于ADMM的约束iLQR算法 (论文 Algorithm 1)
 %
 % 输入:
@@ -7,6 +7,7 @@ function [X_opt, U_opt, debug_info] = run_admm_ilqr(x0, candidate, constraints, 
 %   constraints: 约束结构体 (.u_min, .u_max, .obstacles)
 %   dt, L, weights: 系统参数
 %   options: 算法参数 (.max_admm_iter, .max_ilqr_iter, .sigma, .tol_admm)
+%.  warm_start_U (2 x N) : 来自上一帧的控制序列建议（可选）
 %
 % 输出:
 %   X_opt, U_opt: 优化后的轨迹
@@ -20,6 +21,8 @@ if ~isfield(options, 'max_ilqr_iter'), options.max_ilqr_iter = 100; end
 if ~isfield(options, 'sigma'), options.sigma = 10.0; end
 if ~isfield(options, 'tol_admm'), options.tol_admm = 1e-3; end
 
+if nargin < 8, warm_start_U = []; end % 默认无热启动
+
 x_ref_traj = candidate.x_ref;
 acc_ref = candidate.acc;
 
@@ -27,7 +30,31 @@ N = size(x_ref_traj, 2) - 1;
 sigma = options.sigma;
 
 % 初始化轨迹 (Algorithm 1, Line 1)
-[X_init, U_init] = generate_initial_trajectory(x0, x_ref_traj, N, dt, L, constraints, acc_ref);
+if ~isempty(warm_start_U)
+    % --- Hot Start (热启动) ---
+    % 使用传入的控制序列，结合当前 x0 积分得到初始轨迹 X
+    % 这保证了 X_init 符合动力学约束且从当前 x0 出发
+    U_init = warm_start_U;
+    
+    % 简单的完整性检查：长度必须匹配
+    if size(U_init, 2) ~= N
+        % 如果长度不匹配（例如规划时域变了），回退到冷启动
+        warning('Warm start U length mismatch. Reverting to cold start.');
+        [X_init, U_init] = generate_initial_trajectory(x0, x_ref_traj, N, dt, L, constraints, acc_ref);
+    else
+        % 前向积分生成对应的 X_init
+        X_init = zeros(4, N+1);
+        X_init(:, 1) = x0;
+        for k = 1:N
+            X_init(:, k+1) = update_state(X_init(:, k), U_init(:, k), dt, L);
+        end
+        % fprintf('  [Info] Using Warm Start.\n');
+    end
+else
+    % --- Cold Start (冷启动) ---
+    % 使用 PID/PurePursuit 生成初值
+    [X_init, U_init] = generate_initial_trajectory(x0, x_ref_traj, N, dt, L, constraints, acc_ref);
+end
 X = X_init;
 U = U_init;
 
@@ -48,7 +75,7 @@ debug_info.U_history = {};
 
 target_dot_sign = zeros(1, length(constraints.obstacles));
 
-fprintf('Starting ADMM-iLQR...\n');
+% fprintf('Starting ADMM-iLQR...\n');
 
 % ==========================================
 % 2. ADMM 主循环 (Algorithm 1, Line 3)
@@ -129,10 +156,10 @@ for iter_admm = 1:options.max_admm_iter
     debug_info.X_history{end+1} = X_hist_ilqr;
     debug_info.U_history{end+1} = U_hist_ilqr;
 
-    fprintf('ADMM Iter %2d: Cost = %.4e, Residual = %.4e\n', iter_admm, ilqr_cost, total_res);
+    % fprintf('ADMM Iter %2d: Cost = %.4e, Residual = %.4e\n', iter_admm, ilqr_cost, total_res);
 
     if total_res < options.tol_admm
-        fprintf('ADMM Converged!\n');
+        % fprintf('ADMM Converged!\n');
         break;
     end
 end
