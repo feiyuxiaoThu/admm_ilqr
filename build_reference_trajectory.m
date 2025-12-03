@@ -1,9 +1,9 @@
-function [x_ref_traj] = build_reference_trajectory(scenario_id, v_target, dt, N)
+function x_ref_traj = build_reference_trajectory(scenario_id, v_target, dt, N)
 % BUILD_REFERENCE_TRAJECTORY  Generate reference trajectory and initial state
-%   [x_ref_traj, x0] = build_reference_trajectory(scenario_id, v_target, dt, N)
+%   x_ref_traj = build_reference_trajectory(scenario_id, v_target, dt, N)
 %
 %   scenario_id: 1=straight, 2=circle, 3=intersection (straight->turn->straight)
-%   returns x_ref_traj (4 x N+1) and initial state x0 (4x1)
+%   returns x_ref_traj (4 x N+1)
 
 x_ref_traj = zeros(4, N+1); % [X; Y; phi; v]
 

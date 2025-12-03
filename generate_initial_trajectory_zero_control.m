@@ -1,4 +1,4 @@
-function [X, U] = generate_initial_trajectory_zero_control(x0, x_ref_traj, N, dt, L, constraints)
+function [X, U] = generate_initial_trajectory_zero_control(x0, N, dt, L)
     % Generate initial nominal trajectory (zero controls)
     nx = 4; nu = 2;
     U = zeros(nu, N);        % N control steps

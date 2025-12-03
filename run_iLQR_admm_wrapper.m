@@ -7,27 +7,25 @@ U_hist_ilqr = zeros(size(U,1), size(U,2), options.max_ilqr_iter);
 actual_iters = 0;
 
 for iter = 1:options.max_ilqr_iter
-    % Backward Pass (传入 admm_data)
-    % 注意: backward_pass 函数需要对应更新接口
+    % Backward Pass (pass admm_data)
+    % Note: backward_pass function interface needs corresponding update
     % tic;
     [k_list, K_list, success] = backward_pass_admm(X, U, x_ref, weights, dt, L, admm_data);
     % backward_time = toc;
     % fprintf('  Backward Pass Time: %.4f s\n', backward_time);
 
     if ~success
-        % 如果失败，通常意味着正则化都没救回来，直接退出当前 iLQR
+        % If failed, usually means regularization couldn't help, exit current iLQR
         break;
     end
 
     % tic;
-    % Forward Pass (传入 admm_data 用于计算 Line Search 的 Cost)
+    % Forward Pass (pass admm_data for line search cost computation)
     [X_new, U_new, cost_new, cost_old] = forward_pass_admm(X, U, k_list, K_list, x_ref, weights, dt, L, admm_data);
     % forward_time = toc;
     % fprintf('  Forward Pass Time: %.4f s\n', forward_time);
 
-    % 简单的 Cost 变化检查
-    % 这里为了节省计算，可以简化。如果是第一步，没有 old cost，怎么比？
-    % 通常我们在循环外算一次 initial cost。
+    % Simple cost change check
     if iter == 1
         current_cost = cost_old;
     end

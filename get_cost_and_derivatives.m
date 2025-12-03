@@ -1,29 +1,31 @@
 function [l, lx, lu, lxx, luu, lux] = get_cost_and_derivatives(x, u, u_prev, x_ref, weights, step_admm, is_terminal)
-    % GET_COST_AND_DERIVATIVES  Compute cost and derivatives (ADMM supported)
+    % GET_COST_AND_DERIVATIVES - Compute stage cost and derivatives with optional ADMM augmentation
     %
-    % Compact implementation consistent with the reference
-    % Cost: l = 0.5 * (z - z_ref)' * Q * (z - z_ref)
+    % Combines iLQR tracking cost with control rate penalty and optional ADMM penalty terms.
+    % Base cost: l = 0.5 * (z - z_ref)' * Q * (z - z_ref)
     %
     % Inputs:
     %   x: state vector [X; Y; phi; v] (4x1)
     %   u: control vector [a; delta] (2x1)
+    %   u_prev: previous control [a_prev; delta_prev] (2x1)
     %   x_ref: reference state [X_ref; Y_ref; phi_ref; v_ref] (4x1)
-    %   weights: struct containing weighting terms
-    %   step_admm (optional): struct with ADMM variables. If empty, computes
-    %       the original cost without ADMM terms.
-    %       step_admm.sigma: penalty parameter
-    %       step_admm.z_u: projected control [a_proj; delta_proj]
-    %       step_admm.lambda_u: dual variable for control
-    %       step_admm.z_x: projected position [X_proj; Y_proj] (for position constraints)
-    %       step_admm.lambda_x: dual variable for position
+    %   weights: struct with fields [q_pos_x, q_pos_y, q_vel, r_acc, r_steer,
+    %            q_pos_x_term, q_pos_y_term, q_vel_term, r_delta_acc, r_delta_steer]
+    %   step_admm: struct with optional ADMM variables (empty struct disables ADMM)
+    %     .sigma: penalty parameter
+    %     .z_u: projected control [a_proj; delta_proj] (2x1)
+    %     .lambda_u: dual variable for control (2x1)
+    %     .z_x: projected position [X_proj; Y_proj] (2x1)
+    %     .lambda_x: dual variable for position (2x1)
+    %   is_terminal: boolean flag, determines if terminal or stage cost weights are used
     %
     % Outputs:
-    %   l:   scalar cost
-    %   lx:  gradient w.r.t. x (4x1)
-    %   lu:  gradient w.r.t. u (2x1)
-    %   lxx: Hessian w.r.t. x (4x4)
-    %   luu: Hessian w.r.t. u (2x2)
-    %   lux: cross Hessian (2x4)
+    %   l: scalar cost (iLQR + control rate + ADMM terms if enabled)
+    %   lx: gradient w.r.t. state x (4x1)
+    %   lu: gradient w.r.t. control u (2x1)
+    %   lxx: Hessian w.r.t. state x (4x4)
+    %   luu: Hessian w.r.t. control u (2x2)
+    %   lux: cross Hessian term (2x4)
 
     % 1. Calculate raw iLQR cost (tracking + control effort)
 

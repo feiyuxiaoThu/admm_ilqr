@@ -1,61 +1,58 @@
-% clear environment
 clc; clear;
 close all;
 
-% 1. Global parameters
+% Global parameters
 dt = 0.1;           % time step (s)
 L = 3.0;            % wheelbase (m)
 v_target = 10.0;    % target speed (m/s)
 total_time = 6.0;   % total simulation time (s)
 N = floor(total_time / dt);
 
-% Weights
-weights.q_pos_x = 0.1;    % position x penalty
-weights.q_pos_y = 0.2;    % position y penalty
-weights.q_vel = 0.0;    % velocity penalty
-weights.r_acc = 0.5;    % acceleration penalty
-weights.r_steer = 50.0; % steering penalty
-weights.q_pos_x_term = 0.1; % X position terminal penalty
-weights.q_pos_y_term = 50.0; % Y position terminal penalty
-weights.q_vel_term = 0.0;  % velocity terminal penalty
-weights.r_delta_acc = 10.0;
-weights.r_delta_steer = 10.0;
+% iLQR optimization weights
+weights.q_pos_x = 0.1;    % position x penalty (stage)
+weights.q_pos_y = 0.2;    % position y penalty (stage)
+weights.q_vel = 0.0;      % velocity penalty (stage)
+weights.r_acc = 0.5;      % acceleration penalty
+weights.r_steer = 50.0;   % steering penalty
+weights.q_pos_x_term = 0.1;   % terminal x penalty
+weights.q_pos_y_term = 50.0;  % terminal y penalty
+weights.q_vel_term = 0.0;     % terminal velocity penalty
+weights.r_delta_acc = 10.0;    % control rate penalty (acceleration)
+weights.r_delta_steer = 10.0;  % control rate penalty (steering)
 
-% 轨迹评估权重 (Evaluator Weights)
-% 这些权重用于从并行优化的结果中选出最佳轨迹
-% 注意：这与 iLQR 内部的优化权重不同，这是决策层的权重
-eval_weights.w_safety      = 2.0;  % 安全裕度权重 (很高，哪怕侵入一点警戒区也要重罚)
-eval_weights.w_progress    = 10.0;   % 行驶距离奖励 (越大越倾向于跑得快)
-eval_weights.w_ref_vel     = 0.5;   % 速度误差惩罚 (越大越倾向于维持限速)
-eval_weights.w_acc         = 0.1;   % 加速度惩罚 (舒适性)
-eval_weights.w_steer       = 100.0;   % 转向惩罚
-eval_weights.w_jerk_lon    = 0.1;
-eval_weights.w_jerk_lat    = 100.0;
-eval_weights.w_consistency = 500.0;   % 决策一致性 (防止在 Keep 和 Change 之间频繁跳变)
-% 初始化上一帧的最佳 ID
-last_best_id = -1;
+% Trajectory evaluation weights (for selecting best candidate)
+% Note: Different from iLQR internal weights - these are decision-level weights
+eval_weights.w_safety      = 2.0;    % safety margin penalty
+eval_weights.w_progress    = 10.0;   % progress reward
+eval_weights.w_ref_vel     = 0.5;    % velocity error penalty
+eval_weights.w_acc         = 0.1;    % acceleration penalty (comfort)
+eval_weights.w_steer       = 100.0;  % steering penalty
+eval_weights.w_jerk_lon    = 0.1;    % longitudinal jerk penalty
+eval_weights.w_jerk_lat    = 100.0;  % lateral jerk penalty
+eval_weights.w_consistency = 500.0;  % decision consistency (avoid frequent switching)
+last_best_id = -1;  % Initialize best candidate from previous frame
 
-% ADMM-iLQR parameters
-options.max_admm_iter = 10;     % ADMM 最大迭代次数
-options.sigma = 10.0;           % ADMM 惩罚参数 (初始)
-options.tol_admm = 1e-1;        % ADMM 收敛容差
-options.alpha_or = 1.0;        % ADMM 过松弛参数，1.0 表示无过松弛 (ADMM 收敛容差较大时（1e-1）不需要改)
-options.adjust_sigma = false;   % 是否自适应调整 sigma (开启收敛更慢)
-options.max_ilqr_iter = 50;     % 内部 iLQR 最大迭代次数
-options.ilqr_tol = 1e-1;        % iLQR 收敛容差
+% ADMM-iLQR algorithm parameters
+options.max_admm_iter = 10;     % max ADMM iterations
+options.sigma = 10.0;           % ADMM penalty parameter (initial)
+options.tol_admm = 1e-1;        % ADMM convergence tolerance
+options.alpha_or = 1.0;         % ADMM over-relaxation parameter
+options.adjust_sigma = false;   % adaptive sigma adjustment
+options.max_ilqr_iter = 50;     % max iLQR iterations per ADMM step
+options.ilqr_tol = 1e-1;        % iLQR convergence tolerance
 
-% 2. Build simulation scenario
+% Build simulation scenario
 [scenario, constraints, x0] = build_simulation_scenario(dt, N);
 
-% 3. Generate candidate goals
+% Generate candidate trajectories
 candidates = generate_candidates_structured(x0, scenario, constraints, N, dt);
 fprintf('Generated %d candidate trajectories.\n', length(candidates));
 
-% 4. Multi-branch ADMM-iLQR
+% Optimize all candidates in parallel using ADMM-iLQR
 results = struct();
 tic;
-parfor i = 1:length(candidates) % 开启并行
-% for i = 1:length(candidates)
+parfor i = 1:length(candidates)  % Enable parallel processing
+% for i = 1:length(candidates)    % Sequential version for debugging
     fprintf('Optimizing Candidate %d: %s (Target V=%.2f)\n', ...
         candidates(i).id, candidates(i).name, candidates(i).v_target);
     % tic;
@@ -73,6 +70,7 @@ end
 total_time = toc;
 fprintf('All candidates optimized. Total time: %.4f s\n', total_time);
 
+% % Optional: Plot iLQR iteration history for each candidate
 % for i = 1:length(results)
 %     fprintf('Candidate %d: %s, Final Cost: %.4f\n', ...
 %         results(i).cand.id, results(i).cand.name, results(i).cost);
@@ -86,11 +84,8 @@ fprintf('All candidates optimized. Total time: %.4f s\n', total_time);
 %     % close all;
 % end
 
-% 5. Evaluate trajectories and select the best one
-% 构造场景参数供评估器使用
-scenario_params.v_desired = scenario.v_desired; % 例如 10.0 m/s
-
-% 调用评估器
+% Evaluate trajectories and select best candidate
+scenario_params.v_desired = scenario.v_desired;  % desired speed
 [best_idx, best_score, all_scores] = evaluate_trajectories(...
     results, ...
     constraints.obstacles, ...
@@ -98,7 +93,7 @@ scenario_params.v_desired = scenario.v_desired; % 例如 10.0 m/s
     scenario_params, ...
     eval_weights);
 
-% 输出结果
+% Output decision result
 if best_idx ~= -1
     best_cand = results(best_idx).cand;
     fprintf('\n>>> 🌟 FINAL DECISION: Candidate %d (%s) \n', best_cand.id, best_cand.name);
@@ -107,21 +102,18 @@ if best_idx ~= -1
         all_scores(best_idx).J_safe * eval_weights.w_safety, ...
         all_scores(best_idx).J_prog, ...
         all_scores(best_idx).J_comf);
-        
-    % 更新上一帧 ID (用于下一帧的一致性计算)
+    
+    % Update best ID for next frame consistency check
     last_best_id = best_cand.id;
     
-    % 提取最终要执行的轨迹
+    % Extract optimal trajectory for execution
     final_X = results(best_idx).X;
     final_U = results(best_idx).U;
-    
-    % 这里可以加一个绘图函数，画出所有候选轨迹，并高亮最佳轨迹
 else
     warning('EMERGENCY: No valid trajectory found! Triggering AEB.');
-    % 触发紧急制动逻辑 (AEB)
 end
 
-% 可视化
+% Visualization
 if best_idx ~= -1
     plot_results_multimodal(results, best_idx, constraints, scenario, dt);
 else

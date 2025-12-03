@@ -1,40 +1,40 @@
 function [z_u, z_x] = project_constraints_euclidean(u_traj, x_traj, lambda_u, lambda_x, sigma, constraints)
-% PROJECT_CONSTRAINTS ADMM步骤2: 将变量投影到可行域
+% PROJECT_CONSTRAINTS ADMM step 2: Project variables onto feasible domain
 %
-% 输入:
-%   u_traj: 当前控制轨迹 (2 x N)
-%   x_traj: 当前状态轨迹 (4 x N+1)
-%   lambda_u: 控制对偶变量 (2 x N)
-%   lambda_x: 状态对偶变量 (2 x N+1) -- 注意只取前两维(X,Y)
-%   sigma: 惩罚参数
-%   constraints: 约束参数结构体
-%       .u_min, .u_max: 控制量范围
-%       .obstacles: 障碍物列表 struct array (.x, .y, .a, .b, .theta)
+% Inputs:
+%   u_traj: current control trajectory (2 x N)
+%   x_traj: current state trajectory (4 x N+1)
+%   lambda_u: control dual variables (2 x N)
+%   lambda_x: state dual variables (2 x N+1) -- note: only first two dimensions (X,Y) used
+%   sigma: penalty parameter
+%   constraints: constraint struct
+%       .u_min, .u_max: control bounds
+%       .obstacles: obstacle list struct array (.x, .y, .a, .b, .theta)
 %
-% 输出:
-%   z_u: 投影后的控制变量 (2 x N)
-%   z_x: 投影后的位置变量 (2 x N+1)
+% Outputs:
+%   z_u: projected control variables (2 x N)
+%   z_x: projected position variables (2 x N+1)
 
 % ==========================================
-% 1. 控制约束投影 (Box Constraint)
+% 1. Control constraint projection (Box Constraint)
 % ==========================================
-% 计算待投影点 y_u = u + lambda_u / sigma
+% Compute projection point y_u = u + lambda_u / sigma
 y_u = u_traj + lambda_u / sigma;
 
-% 执行截断 (Clamp)
+% Apply clamping
 z_u = max(constraints.u_min, min(constraints.u_max, y_u));
 
 % ==========================================
-% 2. 障碍物约束投影 (Obstacle Avoidance)
+% 2. Obstacle constraint projection (Obstacle Avoidance)
 % ==========================================
-% 提取位置部分 (X, Y)
+% Extract position part (X, Y)
 pos_traj = x_traj(1:2, :);
 
-% 计算待投影点 y_x = x + lambda_x / sigma
-% 注意: lambda_x 也是 2x(N+1) 维，只对应位置
+% Compute projection point y_x = x + lambda_x / sigma
+% Note: lambda_x is also 2x(N+1) dimensional, corresponding to position only
 y_x = pos_traj + lambda_x / sigma;
 
-z_x = y_x; % 默认就在原位 (如果没有碰撞)
+z_x = y_x; % Default: no change (if no collision exists)
 
 if isfield(constraints, 'obstacles') && ~isempty(constraints.obstacles)
     num_obs = length(constraints.obstacles);
@@ -43,158 +43,157 @@ if isfield(constraints, 'obstacles') && ~isempty(constraints.obstacles)
     for j = 1:num_obs
         obs = constraints.obstacles(j);
         
-        % === 1. 构建论文公式 (9) 的 A 矩阵 ===
-        % 注意：论文里的 e_a, e_b 对应半轴长
+        % === 1. Build A matrix from equation (9) in paper ===
+        % Note: paper's e_a, e_b correspond to semi-axis lengths
         cos_t = cos(obs.theta);
         sin_t = sin(obs.theta);
-        R = [cos_t, -sin_t; sin_t, cos_t]; % 公式 (7)
+        R = [cos_t, -sin_t; sin_t, cos_t]; % Equation (7)
         
-        % 障碍物参数
+        % Obstacle parameters
         a = obs.a;
         b = obs.b;
         center = [obs.x; obs.y];
         
-        % 预计算用于快速判断的矩阵 (A_mat)
+        % Pre-compute matrix for fast collision detection (A_mat)
         Sigma = diag([1/a^2, 1/b^2]);
         A_mat = R * Sigma * R';
         
         for k = 1:num_steps
             pt_global  = y_x(:, k);
-            d_xy = pt_global  - center; % 向量差
+            d_xy = pt_global  - center; % Vector difference
             
-            % 1. 快速冲突检测 (依然使用椭圆方程)
+            % 1. Fast collision detection (using ellipse equation)
             metric = d_xy' * A_mat * d_xy;
             
             if metric < 1.0
-                % === 碰撞发生：计算严格的欧几里得投影 ===
+                % === Collision detected: compute strict Euclidean projection ===
                 
-                %% 绘图调试用
+                %% Debug: plotting routine (commented out)
                 % figure; hold on; axis equal;
                 % plot(pt_global(1), pt_global(2), 'rx', 'MarkerSize', 10, 'DisplayName', 'Colliding Point');
-                % % 定义单位圆用于变换
+                % % Define unit circle for transformation
                 % theta_circle = linspace(0, 2*pi, 100);
                 % circle_x = cos(theta_circle);
                 % circle_y = sin(theta_circle);
-                % % --- 椭圆变换逻辑 ---
-                % % 1. 缩放 (根据半长轴 a 和 半短轴 b)
+                % % --- Ellipse transformation logic ---
+                % % 1. Scale (based on semi-major axis a and semi-minor axis b)
                 % scale_x = obs.a * circle_x;
                 % scale_y = obs.b * circle_y;
                 
-                % % 2. 旋转 (根据 heading theta)
+                % % 2. Rotate (based on heading theta)
                 % R = [cos(obs.theta), -sin(obs.theta);
                 %     sin(obs.theta),  cos(obs.theta)];
                 % rotated_points = R * [scale_x; scale_y];
                 
-                % % 3. 平移 (移动到中心 x, y)
+                % % 3. Translate (move to center x, y)
                 % final_x = rotated_points(1, :) + obs.x;
                 % final_y = rotated_points(2, :) + obs.y;
                 
-                % % 4. 绘图 (使用 fill 填充颜色)
+                % % 4. Plot (fill with color)
                 % fill(final_x, final_y, [1, 0.6, 0.6], ...
                 %     'FaceAlpha', 0.5, 'EdgeColor', 'r', 'LineWidth', 1, ...
                 %     'DisplayName', 'Obstacle');
                 
-                % % 也可以画个中心点方便观察
+                % % Also plot center point for reference
                 % plot(obs.x, obs.y, 'r+', 'HandleVisibility', 'off');
-                %% 结束绘图调试用
+                %% End debug plotting routine
                 
-                % Step A: 转换到局部坐标系 (平移 + 旋转)
+                % Step A: Transform to local coordinate frame (translation + rotation)
                 pt_local = R' * d_xy;
                 u = pt_local(1);
                 v = pt_local(2);
                 
-                % Step B: 利用第一象限对称性简化求解
+                % Step B: Use first-quadrant symmetry to simplify solving
                 u_abs = abs(u);
                 v_abs = abs(v);
                 
-                % Symmetry Breaking，防止初始轨迹刚好穿过障碍物椭圆中心时陷入局部最优
+                % Symmetry Breaking: prevent local optimum when trajectory pierces ellipse center
                 
-                % 计算当前点在椭圆方程中的值 ( < 1 表示在内部)
-                % 简单的归一化半径估计
+                % Compute normalized radius estimate (< 1 means interior)
                 norm_dist = sqrt((u/a)^2 + (v/b)^2);
-                % [新增策略]：深度排斥
-                % 如果点深陷在障碍物内部 (例如核心 30% 区域)
+                % [New strategy]: Deep repulsion
+                % If point deeply embedded in obstacle interior (e.g., core 30% region)
                 if norm_dist < 0.3
-                    % 既然在中心附近，说明之前的迭代没能把点推出去。
-                    % 我们人工指定：往“容易出去”的方向(短轴)推！
+                    % Near center indicates previous iteration failed to push point out.
+                    % Manually specify: push toward "easy exit" direction (short axis)!
                     
                     if a < b
-                        % x轴更短，往 x 轴推
+                        % x-axis is shorter, push toward x-axis
                         u_abs = max(u_abs, 0.1 * a);
-                        % 这里的 0.1*a 是为了给牛顿法一个显著的非零初值
+                        % 0.1*a provides significant non-zero initial value for Newton's method
                     else
-                        % y轴更短，往 y 轴推
+                        % y-axis is shorter, push toward y-axis
                         v_abs = max(v_abs, 0.1 * b);
                     end
                     
-                    % 重新赋予符号（如果是0，就随便给个正方向）
+                    % Re-assign signs (if zero, assign small positive value)
                     if u == 0, u = 1e-5; end
                     if v == 0, v = 1e-5; end
                 end
                 
-                % [FIX 1] 奇异点保护：如果点极度接近中心，导数会为0
-                % 强制给一个微小的偏移量，让牛顿法能算出梯度方向
+                % [FIX 1] Singular point protection: if point very close to center, derivative = 0
+                % Force small offset to allow Newton's method to compute gradient direction
                 if u_abs < 1e-6 && v_abs < 1e-6
                     u_abs = 1e-5;
                     v_abs = 1e-5;
-                    % 保持原始符号(如果是0就默认为正)
+                    % Maintain original sign (if zero, default to positive)
                     if u == 0, u = 1e-5; end
                     if v == 0, v = 1e-5; end
                 end
                 
-                % Step C: 牛顿迭代法求解 t
-                % 方程: (a*u / (a^2 + t))^2 + (b*v / (b^2 + t))^2 - 1 = 0
-                % 我们寻找 t 使得点投影到边界上。
+                % Step C: Newton's method to solve for parameter t
+                % Equation: (a*u / (a^2 + t))^2 + (b*v / (b^2 + t))^2 - 1 = 0
+                % Find t such that point projects to boundary.
                 
-                % 初始猜测：
-                % 对于内部点，根 t 位于 (-min(a^2, b^2), 0)。
-                % 简单的启发式初值：t = 0 (对应原位置，虽然 f(0)<0，但牛顿法通常能拉回来)
-                % 更稳健的初值是取 -min(a,b)*distance，但 t=0 足够好用。
+                % Initial guess:
+                % For interior points, root t lies in (-min(a^2, b^2), 0).
+                % Simple heuristic: t = 0 (starting position, though f(0)<0, Newton usually recovers)
+                % More robust initial value would use -min(a,b)*distance, but t=0 works well.
                 t = 0;
                 
-                % 牛顿迭代参数
+                % Newton iteration parameters
                 iter_max = 10;
                 tol = 1e-4;
                 
-                % 定义 t 的硬性边界 (对于内部点)
-                % t 不能小于 -min(a^2, b^2)，否则分母为0或负
-                limit_min = -min(a^2, b^2) + 1e-4; % 留一点余量防止除零
-                limit_max = 0; % 内部点投影 t 必为负
+                % Hard bounds for t (for interior points)
+                % t cannot be less than -min(a^2, b^2), otherwise denominator = 0 or negative
+                limit_min = -min(a^2, b^2) + 1e-4; % Leave margin to prevent division by zero
+                limit_max = 0; % Interior point projection: t must be negative
                 
                 for iter = 1:iter_max
                     a2_t = a^2 + t;
                     b2_t = b^2 + t;
                     
-                    % 防止分母为0 (极少数情况，如点在焦点上，加个epsilon保护)
+                    % Protect against zero denominators (rare edge case, e.g., point at focus)
                     if abs(a2_t) < 1e-6, a2_t = 1e-6; end
                     if abs(b2_t) < 1e-6, b2_t = 1e-6; end
                     
-                    % 计算 f(t)
+                    % Compute f(t)
                     term_x = (a * u_abs) / a2_t;
                     term_y = (b * v_abs) / b2_t;
                     f_val = term_x^2 + term_y^2 - 1;
                     
-                    % 检查收敛
+                    % Check convergence
                     if abs(f_val) < tol
                         break;
                     end
                     
-                    % 计算 f'(t)
+                    % Compute f'(t)
                     % f'(t) = -2 * [ (a^2*u^2)/(a^2+t)^3 + (b^2*v^2)/(b^2+t)^3 ]
                     df_val = -2 * ( (term_x^2)/a2_t + (term_y^2)/b2_t );
-                    %导数过小保护 (防止除以0产生NaN)
+                    % Protect derivative: prevent NaN from division by zero
                     if abs(df_val) < 1e-10
-                        % 如果导数消失（通常不会发生，除非在中心），退化为梯度下降或直接跳出
+                        % If derivative vanishes (typically at center), use epsilon for stability
                         df_val = -1e-10;
                     end
                     
-                    % 牛顿步
+                    % Newton step
                     t_next = t - f_val / df_val;
                     
-                    % === [关键修复]：防止跳出边界 ===
+                    % === [Key fix]: Prevent stepping outside bounds ===
                     if t_next <= limit_min || t_next >= limit_max
-                        % 如果牛顿法这一步跳飞了，改用“二分法”思想折中一下
-                        % 取当前值和边界的中点，保证不越界
+                        % If Newton step overshoots, use "bisection" idea for compromise
+                        % Take midpoint between current value and boundary to prevent out-of-bounds
                         if t_next <= limit_min
                             t_next = (t + limit_min) / 2;
                         else
@@ -204,7 +203,7 @@ if isfield(constraints, 'obstacles') && ~isempty(constraints.obstacles)
                     t = t_next;
                 end
                 
-                % Step D: 计算局部坐标系下的投影点 Q_local
+                % Step D: Compute projected point Q_local in local frame
                 denom_x = a^2 + t;
                 denom_y = b^2 + t;
                 if abs(denom_x) < 1e-8, denom_x = 1e-8; end
@@ -212,9 +211,9 @@ if isfield(constraints, 'obstacles') && ~isempty(constraints.obstacles)
                 q_x_abs = (a^2 * u_abs) / denom_x;
                 q_y_abs = (b^2 * v_abs) / denom_y;
                 
-                % 恢复符号
+                % Restore signs
                 q_x = sign(u) * q_x_abs;
-                % 若 u=0, sign(0)=0, 此时 x应该为0, 逻辑正确
+                % If u=0, sign(0)=0, so x should be 0, logic is correct
                 if u == 0, q_x = 0; end
                 
                 q_y = sign(v) * q_y_abs;
@@ -222,16 +221,16 @@ if isfield(constraints, 'obstacles') && ~isempty(constraints.obstacles)
                 
                 Q_local = [q_x; q_y];
                 
-                % Step E: 转换回全局坐标系
+                % Step E: Transform back to global coordinate frame
                 Q_global = R * Q_local + center;
                 z_x(:, k) = Q_global;
                 
-                %% 碰撞投影后绘图调试用
+                %% Debug: plot after projection (optional)
                 % plot(Q_global(1), Q_global(2), 'go', 'MarkerSize', 10, 'DisplayName', 'Projected Point');
                 % close all;
-                %% 结束绘图调试用
+                %% End debug plotting
                 
-                % 更新 y_x (可选，防止多重障碍物处理时的顺序问题)
+                % Update y_x (optional, prevents reordering issues with multiple obstacles)
                 y_x(:, k) = z_x(:, k);
                 
             end

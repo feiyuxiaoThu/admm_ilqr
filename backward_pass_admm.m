@@ -15,6 +15,7 @@ if isfield(admm_data, 'lambda_x'), step_admm.lambda_x = admm_data.lambda_x(:, N+
 success = true;
 
 % Regularization parameters initialization
+% Initial regularization parameters for numerical stability
 reg_mu = 1e-6;      % initial regularization
 reg_min = 1e-6;     % minimum regularization
 reg_max = 1e3;      % maximum regularization (failure if exceeded)
@@ -25,25 +26,25 @@ for i = N:-1:1
     x = X(:, i);
     u = U(:, i);
     x_ref = x_ref_traj(:, i);
-    
+
     if i == 1
         u_prev = zeros(2, 1);
     else
         u_prev = U(:, i-1);
     end
-    
+
     step_admm = struct('sigma', admm_data.sigma);
-    % 提取第 i 步的控制约束数据
+    % Extract control constraint data for step i
     if isfield(admm_data, 'z_u')
         step_admm.z_u = admm_data.z_u(:, i);
         step_admm.lambda_u = admm_data.lambda_u(:, i);
     end
-    % 提取第 i 步的状态约束数据
+    % Extract state constraint data for step i
     if isfield(admm_data, 'z_x')
         step_admm.z_x = admm_data.z_x(:, i);
         step_admm.lambda_x = admm_data.lambda_x(:, i);
     end
-    
+
     % dynamics Jacobians
     A = get_A_matrix(x, u, dt, L);
     B = get_B_matrix(x, u, dt, L);
