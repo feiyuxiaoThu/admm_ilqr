@@ -76,7 +76,7 @@ Matlab
 
 ## 📂 File Structure
 
-- `gemini_admm_ilqr/`
+- `admm_ilqr/`
     - `main_ADMM_iLQR.m`: **[Entry Point]** Main script for single-frame planning.
     - `run_closed_loop_simulation.m`: **[Entry Point]** Main script for closed-loop simulation.
     - `run_admm_ilqr.m`: Core logic for the ADMM-iLQR algorithm (Algorithm 1).
