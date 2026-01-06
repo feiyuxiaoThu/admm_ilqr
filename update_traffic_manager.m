@@ -19,7 +19,7 @@ function obs_list = update_traffic_manager(obs_list, ego_state, scenario)
     end
     
     % --- 2. Spawn (Generate) ---
-    target_num = 2 + randi(2); % 2-4 vehicles
+    target_num = 5; % 5 vehicles
     current_num = length(obs_list);
     
     % Safety counter to prevent infinite loop

@@ -37,14 +37,14 @@ h_title_text = [];    % Status text
 
 % Video recording setup
 % save to mp4
-% if save_video
-%     v_writer = VideoWriter('simulation_video.mp4', 'MPEG-4');
-%     v_writer.FrameRate = 10;
-%     open(v_writer);
-% end
+if save_video
+    v_writer = VideoWriter('simulation_video.mp4', 'MPEG-4');
+    v_writer.FrameRate = 20;
+    open(v_writer);
+end
 
 % save to gif
-gif_filename = 'simulation_video.gif';
+% gif_filename = 'simulation_video.gif';
 
 % Animation loop
 for k = 1:N_sim
@@ -146,18 +146,18 @@ for k = 1:N_sim
 
     if save_video
         % save to mp4
-        % frame = getframe(gcf);
-        % writeVideo(v_writer, frame);
+        frame = getframe(gcf);
+        writeVideo(v_writer, frame);
 
         % save to gif
-        frame = getframe(gcf); 
-        im = frame2im(frame); 
-        [imind, cm] = rgb2ind(im, 256); 
-        if k == 1
-            imwrite(imind, cm, gif_filename, 'gif', 'Loopcount', inf, 'DelayTime', 0.05); 
-        else
-            imwrite(imind, cm, gif_filename, 'gif', 'WriteMode', 'append', 'DelayTime', 0.05); 
-        end
+        % frame = getframe(gcf); 
+        % im = frame2im(frame); 
+        % [imind, cm] = rgb2ind(im, 256); 
+        % if k == 1
+        %     imwrite(imind, cm, gif_filename, 'gif', 'Loopcount', inf, 'DelayTime', 0.05); 
+        % else
+        %     imwrite(imind, cm, gif_filename, 'gif', 'WriteMode', 'append', 'DelayTime', 0.05); 
+        % end
     else
         pause(0.04);
     end
@@ -165,7 +165,8 @@ end
 
 if save_video
     % save to mp4
-    % close(v_writer); 
+    close(v_writer); 
+
     fprintf('Video saved to simulation_video\n');
 end
 end

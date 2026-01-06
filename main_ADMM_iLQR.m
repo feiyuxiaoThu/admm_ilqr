@@ -51,8 +51,8 @@ fprintf('Generated %d candidate trajectories.\n', length(candidates));
 % Optimize all candidates in parallel using ADMM-iLQR
 results = struct();
 tic;
-parfor i = 1:length(candidates)  % Enable parallel processing
-% for i = 1:length(candidates)    % Sequential version for debugging
+% parfor i = 1:length(candidates)  % Enable parallel processing
+for i = 1:length(candidates)    % Sequential version for debugging
     fprintf('Optimizing Candidate %d: %s (Target V=%.2f)\n', ...
         candidates(i).id, candidates(i).name, candidates(i).v_target);
     % tic;

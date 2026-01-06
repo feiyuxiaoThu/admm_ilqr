@@ -9,8 +9,8 @@ scenario.lane_centers = [-4.0, 0.0, 4.0];
 scenario.lane_width = 4.0;
 
 % --- 2. Ego vehicle initial state ---
-% Positioned in the center lane, speed 10 m/s
-x0 = [0.0; 0.0; 0.0; 10.0];
+% Positioned in the center lane, speed 15 m/s
+x0 = [0.0; 0.0; 0.0; 15.0];
 
 % Ego vehicle dimensions
 ego_size.length = 4.5;
