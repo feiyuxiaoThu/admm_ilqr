@@ -38,7 +38,7 @@ raw_obs_list = [obs1, obs2, obs3];
 constraints.obstacles = generate_obstacles(raw_obs_list, ego_size, dt, N);
 
 % --- 5. Physical constraints ---
-constraints.u_min = [-2.0; -0.5]; % Minimum control inputs
+constraints.u_min = [-3.0; -0.5]; % Minimum control inputs
 constraints.u_max = [ 2.0;  0.5]; % Maximum control inputs
 
 % Scenario metadata

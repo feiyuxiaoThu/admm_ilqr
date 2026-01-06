@@ -1,4 +1,4 @@
-function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, obstacles, last_best_target_lane_id, scenario_params, eval_weights)
+function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, obstacles, last_best_target_lane_id, last_best_cand_name, scenario_params, eval_weights)
 % EVALUATE_TRAJECTORIES Score candidate trajectories and pick the best
 %
 % Logic:
@@ -9,6 +9,7 @@ function [best_idx, best_cost, debug_scores] = evaluate_trajectories(results, ob
 %   results: struct array with fields .X, .U, .valid, .cand
 %   obstacles: obstacle structs (may include .prediction)
 %   last_best_target_lane_id: previous chosen lane id (for consistency reward)
+%   last_best_cand_name: previous chosen candidate name (for consistency reward)
 %   scenario_params: contains .v_desired (global desired speed)
 %   eval_weights: weight struct for scores
 %
@@ -86,6 +87,11 @@ for i = 1:num_cands
     if last_best_target_lane_id ~= -1
         if cand.target_lane_id ~= last_best_target_lane_id
             J_consistency = eval_weights.w_consistency;
+        end
+    end
+    if ~isempty(last_best_cand_name)
+        if ~strcmp(cand.name, last_best_cand_name)
+            J_consistency = J_consistency + eval_weights.w_consistency;
         end
     end
 

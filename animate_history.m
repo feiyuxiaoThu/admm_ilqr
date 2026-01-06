@@ -31,6 +31,7 @@ draw_road_network(ax_main, scenario);
 h_ego_body = [];      % Ego vehicle patch
 h_obs_bodies = [];    % Obstacle patches array
 h_obs_preds = [];     % Obstacle prediction lines array
+h_obs_speeds = [];    % Obstacle speed text labels array
 h_cands = [];         % Candidate trajectories array
 h_plan = [];          % Optimal planned trajectory line
 h_title_text = [];    % Status text
@@ -70,6 +71,8 @@ for k = 1:N_sim
         for j = length(h_obs_bodies)+1 : num_obs
             h_obs_bodies(j) = draw_car_patch(ax_main, [0;0;0;0], struct('length',4.5,'width',2), [1 0.7 0.7], 0.6);
             h_obs_preds(j) = plot(ax_main, 0, 0, 'r:', 'LineWidth', 1.0);
+            h_obs_speeds(j) = text(ax_main, 0, 0, '0.0', 'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'middle', 'Color', [0.15 0.15 0.2], 'FontSize', 9);
         end
     end
 
@@ -84,6 +87,16 @@ for k = 1:N_sim
         if isfield(obs, 'prediction') && ~isempty(obs.prediction)
             set(h_obs_preds(j), 'XData', obs.prediction(1,:), 'YData', obs.prediction(2,:));
         end
+
+        % Update speed text label
+        obs_speed = 0;
+        if isfield(obs, 'vx') && isfield(obs, 'vy')
+            obs_speed = sqrt(obs.vx^2 + obs.vy^2);
+        elseif isfield(obs, 'v')
+            obs_speed = obs.v;
+        end
+        set(h_obs_speeds(j), 'Position', [obs.x, obs.y, 0], ...
+            'String', sprintf('%.1f', obs_speed));
     end
 
     % Update planning results

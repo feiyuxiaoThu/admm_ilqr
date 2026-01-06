@@ -96,15 +96,17 @@ end
 % Retrieve previous best target lane for consistency
 if isempty(last_plan_info) || ~isfield(last_plan_info, 'best_target_lane_id')
     last_best_target_lane_id = -1;
+    last_best_cand_name = '';
 else
     last_best_target_lane_id = last_plan_info.best_target_lane_id;
+    last_best_cand_name = last_plan_info.best_cand_name;
 end
 
 % Construct scenario parameters for evaluation
 scenario_params.v_desired = scenario.v_desired;
 
 [best_idx, best_score, all_scores] = evaluate_trajectories(...
-    results, obstacles, last_best_target_lane_id, scenario_params, eval_weights);
+    results, obstacles, last_best_target_lane_id, last_best_cand_name, scenario_params, eval_weights);
 
 % Package output for next frame and logging
 plan_info.timestamp = now;  % Timestamp for this planning cycle

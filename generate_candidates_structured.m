@@ -36,30 +36,30 @@ search_offsets = [0, 1, -1];
 
 for offset = search_offsets
     target_lane_idx = curr_lane_idx + offset;
-
+    
     % Check if lane exists
     if target_lane_idx < 1 || target_lane_idx > length(scenario.lane_centers)
         continue;
     end
-
+    
     target_y = scenario.lane_centers(target_lane_idx);
-
+    
     % Define lateral action label
     if offset == 0, lat_action = 'Keep';
     elseif offset == 1, lat_action = 'Left';
     else, lat_action = 'Right';
     end
-
+    
     % --- 3. Perception: find leading obstacle in target lane ---
     [has_lead, lead_obs] = find_leading_obstacle(p0_x, target_y, constraints.obstacles);
-
+    
     % ===========================================================
     % Longitudinal mode A: reach desired speed (Cruise/Overtake)
     % ===========================================================
     % Call velocity solver
     P_cruise = target_velocity_solver(v0, a0, v_desired, limits);
     % plot_target_velocity_result(P_cruise, v0, a0, p0_x, limits, N*dt);
-
+    
     % Generate discretized trajectory
     [traj_cruise, acc_cruise] = discretize_trajectory(P_cruise, 'velocity', x0, target_y, N, dt);
     % figure;
@@ -70,12 +70,12 @@ for offset = search_offsets
     % plot(0:dt:dt*N, traj_cruise(4, :), 'LineWidth', 1.0);
     % legend('Velocity Profile'); xlabel('Time (s)'); ylabel('Velocity (m/s)'); grid on;
     % close all;
-
+    
     % Add candidate
     candidates = add_candidate(candidates, cand_id, ...
         [lat_action, '_Cruise'], traj_cruise, acc_cruise, v_desired, target_lane_idx);
     cand_id = cand_id + 1;
-
+    
     % ===========================================================
     % Longitudinal mode B: adapt to leading vehicle (Follow/Yield/Stop)
     % ===========================================================
@@ -83,45 +83,71 @@ for offset = search_offsets
         % Get leading vehicle info
         v_lead = lead_obs.vx;
         p_lead = lead_obs.x;
-        safe_dist = 10.0 + v_lead * 2.0; % Simple safety distance model
-
-        target_v = v_lead;
-        stable_following_time = 2.0; % seconds for stable following
-        target_pos = p_lead + stable_following_time * v_lead - safe_dist;
-
-        if target_pos > p0_x
-            [Pa, Pb, tpb, tc, ~] = target_position_solver(p0_x, v0, a0, target_pos, target_v, limits, v_max, v_min);
-
-            % target_position_results.Pa = Pa;
-            % target_position_results.Pb = Pb;
-            % target_position_results.tpb = tpb;
-            % target_position_results.tc = tc;
-            % target_position_results.T_total = t_total;
-            % plot_target_position_result(target_position_results, p0_x, v0, a0, limits, dt, 15, target_pos);
+        safe_dist = 10.0 + v_lead * 1.5; % Simple safety distance model
+        
+        if v_lead > 1.0
+            % --- B1: Leading vehicle moving -> match velocity ---
+            % Target: min(lead velocity, desired velocity)
+            target_v = min(v_lead, v_desired);
+            P_follow = target_velocity_solver(v0, a0, target_v, limits);
+            % plot_target_velocity_result(P_follow, v0, a0, p0_x, limits, N*dt);
             % close all;
-
-            % Package position solver output
-            solver_out.Pa = Pa;
-            solver_out.Pb = Pb;
-            solver_out.tpb = tpb;
-            solver_out.tc = tc;
-
+            
             % Generate trajectory
-            [traj_stop, acc_stop] = discretize_trajectory(solver_out, 'position', x0, target_y, N, dt);
+            [traj_follow, acc_follow] = discretize_trajectory(P_follow, 'velocity', x0, target_y, N, dt);
             % figure;
             % subplot(2,1,1);
-            % plot(traj_stop(1, :), traj_stop(2, :), 'LineWidth', 1.0);
+            % plot(traj_follow(1, :), traj_follow(2, :), 'LineWidth', 1.0);
             % legend('Cruise Trajectory'); xlabel('X (m)'); ylabel('Y (m)'); axis equal; grid on;
             % subplot(2,1,2);
-            % plot(0:dt:dt*N, traj_stop(4, :), 'LineWidth', 1.0);
+            % plot(0:dt:dt*N, traj_follow(4, :), 'LineWidth', 1.0);
             % legend('Velocity Profile'); xlabel('Time (s)'); ylabel('Velocity (m/s)'); grid on;
             % close all;
-
+            
+            % Note: velocity solver doesn't guarantee position constraint.
+            % ADMM safety cost will penalize if final position exceeds safe distance.
+            
             candidates = add_candidate(candidates, cand_id, ...
-                [lat_action, '_Stop'], traj_stop, acc_stop, 0, target_lane_idx);
+                [lat_action, '_Follow_V'], traj_follow, acc_follow, target_v, target_lane_idx);
             cand_id = cand_id + 1;
-        end
+            
+        else
+            % --- B2: Leading vehicle stationary -> position-based stop ---
+            target_pos = p_lead - safe_dist;
+            
+            if target_pos > p0_x
+                [Pa, Pb, tpb, tc, ~] = target_position_solver(p0_x, v0, a0, target_pos, limits, v_max, v_min);
 
+                % target_position_results.Pa = Pa;
+                % target_position_results.Pb = Pb;
+                % target_position_results.tpb = tpb;
+                % target_position_results.tc = tc;
+                % target_position_results.T_total = t_total;
+                % plot_target_position_result(target_position_results, p0_x, v0, a0, limits, dt, 15, target_pos);
+                % close all;
+                
+                % Package position solver output
+                solver_out.Pa = Pa;
+                solver_out.Pb = Pb;
+                solver_out.tpb = tpb;
+                solver_out.tc = tc;
+                
+                % Generate trajectory
+                [traj_stop, acc_stop] = discretize_trajectory(solver_out, 'position', x0, target_y, N, dt);
+                % figure;
+                % subplot(2,1,1);
+                % plot(traj_stop(1, :), traj_stop(2, :), 'LineWidth', 1.0);
+                % legend('Cruise Trajectory'); xlabel('X (m)'); ylabel('Y (m)'); axis equal; grid on;
+                % subplot(2,1,2);
+                % plot(0:dt:dt*N, traj_stop(4, :), 'LineWidth', 1.0);
+                % legend('Velocity Profile'); xlabel('Time (s)'); ylabel('Velocity (m/s)'); grid on;
+                % close all;
+                
+                candidates = add_candidate(candidates, cand_id, ...
+                    [lat_action, '_Stop'], traj_stop, acc_stop, 0, target_lane_idx);
+                cand_id = cand_id + 1;
+            end
+        end
     end
 end
 end
@@ -187,7 +213,7 @@ T_lane_change = 4.0;
 
 for k = 1:N+1
     t = (k-1) * dt;
-
+    
     % --- 1. Longitudinal computation ---
     if strcmp(mode, 'velocity')
         % Call get_state_at_t directly
@@ -196,7 +222,7 @@ for k = 1:N+1
         % Use evaluate_position wrapper for piecewise trajectory
         [p_val, v_val, a_val] = evaluate_position(P_struct, v0, a0, p0_x, t);
     end
-
+    
     % --- 2. Lateral computation (smooth interpolation) ---
     if t < T_lane_change
         ratio = t / T_lane_change;
@@ -205,7 +231,7 @@ for k = 1:N+1
     else
         y_val = target_y;
     end
-
+    
     % --- 3. Heading angle approximation ---
     if k > 1
         dx = p_val - traj(1, k-1);
@@ -219,7 +245,7 @@ for k = 1:N+1
     else
         theta_val = theta0;
     end
-
+    
     traj(:, k) = [p_val; y_val; theta_val; v_val];
     acc(k) = a_val;
 end

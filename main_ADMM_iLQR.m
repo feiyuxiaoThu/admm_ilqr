@@ -31,6 +31,7 @@ eval_weights.w_jerk_lon    = 0.1;    % longitudinal jerk penalty
 eval_weights.w_jerk_lat    = 100.0;  % lateral jerk penalty
 eval_weights.w_consistency = 500.0;  % decision consistency (avoid frequent switching)
 last_best_id = -1;  % Initialize best candidate from previous frame
+last_best_cand_name = '';
 
 % ADMM-iLQR algorithm parameters
 options.max_admm_iter = 10;     % max ADMM iterations
@@ -90,6 +91,7 @@ scenario_params.v_desired = scenario.v_desired;  % desired speed
     results, ...
     constraints.obstacles, ...
     last_best_id, ...
+    last_best_cand_name, ...
     scenario_params, ...
     eval_weights);
 
@@ -105,6 +107,7 @@ if best_idx ~= -1
     
     % Update best ID for next frame consistency check
     last_best_id = best_cand.id;
+    last_best_cand_name = best_cand.name;
     
     % Extract optimal trajectory for execution
     final_X = results(best_idx).X;

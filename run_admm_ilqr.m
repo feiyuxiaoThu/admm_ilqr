@@ -99,7 +99,7 @@ for iter_admm = 1:options.max_admm_iter
     % --- Step 2: Projection (Algorithm 1, Line 12-13) ---
     % Compute projection z = Proj(y + lambda/sigma)
     % tic;
-    [z_u_new, z_x_new, target_dot_sign] = project_constraints_stable_ref(U, X, X_init, lambda_u, lambda_x, sigma, constraints, target_dot_sign, iter_admm);
+    [z_u_new, z_x_new, target_dot_sign] = project_constraints_stable_ref_barrier_enhanced(U, X, X_init, lambda_u, lambda_x, sigma, constraints, target_dot_sign);
     % projection_time = toc;
     % fprintf('  Projection Time: %.4f s\n', projection_time);
 

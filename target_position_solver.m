@@ -1,12 +1,11 @@
-function [Pa, Pb, tpb, tc, total_time] = target_position_solver(p0, v0, a0, pf, vf, limits, vmax, vmin)
-% Inputs:  State p0, v0, a0; target pf; target velocity vf; limits; velocity bounds vmax/vmin
-% Outputs: Pa (first phase), Pb (second phase), tpb (switch time), tc (cruise time)
+function [Pa, Pb, tpb, tc, total_time] = target_position_solver(p0, v0, a0, pf, limits, vmax, vmin)
+% Inputs:  State p0, v0, a0; target pf; limits; velocity bounds vmax/vmin
+% Outputs: Pa (acceleration phase), Pb (deceleration phase), tpb (switch time), tc (cruise time)
 
-% --- Line 3: Compute trajectory to reach vf directly (Base Trajectory) ---
-% Changed: target velocity from 0 to vf
-P = target_velocity_solver(v0, a0, vf, limits);
+% --- Line 3: Compute complete stopping trajectory P ---
+P = target_velocity_solver(v0, a0, 0, limits);
 
-% --- Line 4: Get state at the end of this base trajectory ---
+% --- Line 4: Get stopping point state (psp, vsp, asp) ---
 [psp, ~, ~] = get_state_at_t(v0, a0, p0, P, P.T3);
 
 % --- Line 5: Compute position direction dp ---
@@ -26,11 +25,10 @@ end
 Pa = target_velocity_solver(v0, a0, vc, limits);
 
 % --- Line 14: Get end state of Pa (pfa, v, a) ---
-[pfa, v_actual_cruise, ~] = get_state_at_t(v0, a0, p0, Pa, Pa.T3);
+[pfa, v_actual_cruise, a_end_Pa] = get_state_at_t(v0, a0, p0, Pa, Pa.T3);
 
-% --- Line 15: Compute trajectory Pb from vc to vf ---
-% Changed: target velocity from 0 to vf
-Pb = target_velocity_solver(v_actual_cruise, 0, vf, limits);
+% --- Line 15: Compute trajectory Pb from vc stopping (note: initial accel = 0) ---
+Pb = target_velocity_solver(v_actual_cruise, 0, 0, limits);
 
 % --- Line 16: Get Pb end state pfb (starting position is pfa) ---
 [pfb, ~, ~] = get_state_at_t(v_actual_cruise, 0, pfa, Pb, Pb.T3);
@@ -64,18 +62,20 @@ else
         % --- Line 27: Get Pa state at time tpb (ppb, vpb, apb) ---
         [ppb, vpb, apb] = get_state_at_t(v0, a0, p0, Pa, tpb);
 
-        % --- Line 28: Recompute trajectory Pb from cutoff point state ---
-        % Changed: target velocity from 0 to vf
-        Pb = target_velocity_solver(vpb, apb, vf, limits);
+        % --- Line 28: Recompute braking trajectory Pb from cutoff point state ---
+        % Target velocity is 0
+        Pb = target_velocity_solver(vpb, apb, 0, limits);
 
         % --- Line 29: Compute new final position pfb (starting position is ppb) ---
         [pfb, ~, ~] = get_state_at_t(vpb, apb, ppb, Pb, Pb.T3);
 
         % --- Line 30-34: Update bisection bounds ---
+        % sign(pfb - pf) * dp < 0 means we haven't gone far enough (Undershoot),
+        % so need longer acceleration time -> tL = tpb
         if sign(pfb - pf) * dp < 0
-            tL = tpb; % Undershoot, need more Pa
+            tL = tpb;
         else
-            tH = tpb; % Overshoot, need less Pa
+            tH = tpb;
         end
 
         % --- Line 35-37: Check convergence ---

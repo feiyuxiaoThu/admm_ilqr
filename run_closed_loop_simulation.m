@@ -6,7 +6,7 @@ clear; clc; close all;
 % ==========================================
 % 1. Simulation Configuration
 % ==========================================
-T_sim = 40.0;       % Total simulation duration (s) -> increase to test infinite flow
+T_sim = 60.0;       % Total simulation duration (s) -> increase to test infinite flow
 dt = 0.1;           % Simulation timestep (s)
 N_steps = floor(T_sim / dt);
 
@@ -43,7 +43,7 @@ planner_params.options.sigma = 10.0;
 planner_params.options.tol_admm = 1e-1;
 planner_params.options.alpha_or = 1.0;
 planner_params.options.adjust_sigma = false;
-planner_params.options.max_ilqr_iter = 20;
+planner_params.options.max_ilqr_iter = 50;
 planner_params.options.ilqr_tol = 1e-1;
 
 % ==========================================
