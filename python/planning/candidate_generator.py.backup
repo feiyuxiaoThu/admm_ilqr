@@ -1,0 +1,371 @@
+"""
+Candidate Trajectory Generator
+Ported from MATLAB generate_candidates_structured.m
+"""
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import numpy as np
+
+
+class Candidate:
+    """Represents a candidate trajectory"""
+
+    def __init__(self, cand_id, name, x_ref, v_target, acc, target_lane_id):
+        """
+        Initialize candidate
+
+        Args:
+            cand_id: unique identifier (int)
+            name: descriptive name (str)
+            x_ref: reference trajectory (4 x N+1 numpy array)
+            v_target: target velocity (float)
+            acc: acceleration profile (N+1 numpy array)
+            target_lane_id: target lane index (int)
+        """
+        self.id = cand_id
+        self.name = name
+        self.x_ref = x_ref
+        self.v_target = v_target
+        self.acc = acc
+        self.target_lane_id = target_lane_id
+
+
+def find_leading_obstacle(ego_x, lane_y, obstacles):
+    """
+    Find nearest obstacle ahead in specified lane
+
+    Args:
+        ego_x: ego vehicle x-coordinate (float)
+        lane_y: target lane y-coordinate (float)
+        obstacles: list of Obstacle objects
+
+    Returns:
+        found: boolean indicating if obstacle was found
+        obs: Obstacle object if found, None otherwise
+    """
+    min_dist = float('inf')
+    found = False
+    obs = None
+    lane_threshold = 1.5  # Half lane width to check if obstacle is in lane
+
+    for o in obstacles:
+        # Check if ahead
+        if o.x > ego_x:
+            # Check lateral distance
+            if abs(o.y - lane_y) < lane_threshold:
+                dist = o.x - ego_x
+                if dist < min_dist:
+                    min_dist = dist
+                    obs = o
+                    found = True
+
+    return found, obs
+
+
+def get_state_at_t(v0, a0, p0_x, P, t):
+    """
+    Get state at time t for velocity-mode trajectory
+
+    Args:
+        v0: initial velocity (float)
+        a0: initial acceleration (float)
+        p0_x: initial x-position (float)
+        P: velocity solver parameters (dict with 'a_max', 'v_target', 't1', 't2', 't3')
+        t: time (float)
+
+    Returns:
+        p_val: x-position (float)
+        v_val: velocity (float)
+        a_val: acceleration (float)
+    """
+    a_max = P['a_max']
+    v_target = P['v_target']
+    t1 = P['t1']
+    t2 = P['t2']
+    t3 = P['t3']
+
+    if t < t1:
+        # Acceleration phase
+        a_val = a_max
+        v_val = v0 + a_max * t
+        p_val = p0_x + v0 * t + 0.5 * a_max * t**2
+    elif t < t2:
+        # Constant velocity phase
+        a_val = 0
+        v1 = v0 + a_max * t1
+        p1 = p0_x + v0 * t1 + 0.5 * a_max * t1**2
+        v_val = v1
+        p_val = p1 + v1 * (t - t1)
+    elif t < t3:
+        # Deceleration phase
+        a_val = -a_max
+        v2 = v0 + a_max * t1
+        p2 = p0_x + v0 * t1 + 0.5 * a_max * t1**2
+        v_val = v2 - a_max * (t - t2)
+        p_val = p2 + v2 * (t2 - t1) - 0.5 * a_max * (t - t2)**2
+    else:
+        # Constant velocity at target
+        a_val = 0
+        v_val = v_target
+        p3 = p0_x + v0 * t1 + 0.5 * a_max * t1**2 + v_target * (t2 - t1) + v_target * (t3 - t2) - 0.5 * a_max * (t3 - t2)**2
+        p_val = p3 + v_target * (t - t3)
+
+    return p_val, v_val, a_val
+
+
+def evaluate_position(P_struct, v0, a0, p0_x, t):
+    """
+    Get state at time t for position-mode trajectory (piecewise)
+
+    Args:
+        P_struct: position solver parameters (dict with 'Pa', 'Pb', 'tpb', 'tc')
+        v0: initial velocity (float)
+        a0: initial acceleration (float)
+        p0_x: initial x-position (float)
+        t: time (float)
+
+    Returns:
+        p_val: x-position (float)
+        v_val: velocity (float)
+        a_val: acceleration (float)
+    """
+    Pa = P_struct['Pa']
+    Pb = P_struct['Pb']
+    tpb = P_struct['tpb']
+    tc = P_struct['tc']
+
+    if t < tpb:
+        # Phase A: acceleration to reach target position
+        # Simplified: constant acceleration
+        a_val = Pa['a']
+        v_val = v0 + a_val * t
+        p_val = p0_x + v0 * t + 0.5 * a_val * t**2
+    elif t < tc:
+        # Phase B: constant velocity
+        a_val = 0
+        v_val = Pa['v_final']
+        p_pb = p0_x + v0 * tpb + 0.5 * Pa['a'] * tpb**2
+        p_val = p_pb + Pa['v_final'] * (t - tpb)
+    else:
+        # Phase C: deceleration to stop
+        a_val = Pb['a']
+        v_val = Pa['v_final'] + a_val * (t - tc)
+        p_pc = p0_x + v0 * tpb + 0.5 * Pa['a'] * tpb**2 + Pa['v_final'] * (tc - tpb)
+        p_val = p_pc + Pa['v_final'] * (t - tc) + 0.5 * a_val * (t - tc)**2
+
+    return p_val, v_val, a_val
+
+
+def discretize_trajectory(P_struct, mode, x0, target_y, N, dt):
+    """
+    Discretize trajectory from solver output
+
+    Args:
+        P_struct: velocity or position solver parameters (dict)
+        mode: 'velocity' or 'position'
+        x0: initial state [X, Y, phi, v] (4x1 numpy array)
+        target_y: target y-coordinate (float)
+        N: number of time steps (int)
+        dt: time step (float)
+
+    Returns:
+        traj: discretized trajectory (4 x N+1 numpy array)
+        acc: acceleration profile (N+1 numpy array)
+    """
+    traj = np.zeros((4, N + 1))
+    acc = np.zeros(N + 1)
+
+    p0_x = x0[0]
+    p0_y = x0[1]
+    theta0 = x0[2]
+    v0 = x0[3]
+    a0 = 0 if len(x0) < 5 else x0[4]
+
+    # Assume lane change duration
+    T_lane_change = 4.0
+
+    for k in range(N + 1):
+        t = k * dt
+
+        # 1. Longitudinal computation
+        if mode == 'velocity':
+            p_val, v_val, a_val = get_state_at_t(v0, a0, p0_x, P_struct, t)
+        else:  # mode == 'position'
+            p_val, v_val, a_val = evaluate_position(P_struct, v0, a0, p0_x, t)
+
+        # 2. Lateral computation (smooth interpolation)
+        if t < T_lane_change:
+            ratio = t / T_lane_change
+            s = 10 * ratio**3 - 15 * ratio**4 + 6 * ratio**5  # Quintic polynomial
+            y_val = p0_y + (target_y - p0_y) * s
+        else:
+            y_val = target_y
+
+        # 3. Heading angle approximation
+        if k > 0:
+            dx = p_val - traj[0, k - 1]
+            dy = y_val - traj[1, k - 1]
+            # Avoid discontinuity when stationary
+            if np.sqrt(dx**2 + dy**2) > 1e-3:
+                theta_val = np.arctan2(dy, dx)
+            else:
+                theta_val = traj[2, k - 1]
+        else:
+            theta_val = theta0
+
+        traj[:, k] = [p_val, y_val, theta_val, v_val]
+        acc[k] = a_val
+
+    return traj, acc
+
+
+def target_velocity_solver(v0, a0, v_target, limits):
+    """
+    Solve for velocity trajectory to reach target velocity
+
+    Args:
+        v0: initial velocity (float)
+        a0: initial acceleration (float)
+        v_target: target velocity (float)
+        limits: dict with 'a_max', 'a_min', 'j_max', 'j_min'
+
+    Returns:
+        P: dict with solver parameters
+    """
+    a_max = limits['a_max']
+    a_min = limits['a_min']
+
+    # Simple trapezoidal velocity profile
+    if v_target > v0:
+        # Accelerate
+        a = a_max
+        t1 = (v_target - v0) / a
+        t2 = t1  # No constant velocity phase for simplicity
+        t3 = t2 + 1.0  # Small coast phase
+    else:
+        # Decelerate
+        a = a_min
+        t1 = (v_target - v0) / a
+        t2 = t1
+        t3 = t2 + 1.0
+
+    P = {
+        'a_max': a,
+        'v_target': v_target,
+        't1': t1,
+        't2': t2,
+        't3': t3
+    }
+
+    return P
+
+
+def generate_candidates_structured(x0, scenario, constraints, N, dt):
+    """
+    Generate multimodal candidate trajectories
+
+    Args:
+        x0: ego state [X, Y, phi, v] (4x1 numpy array)
+        scenario: Scenario object
+        constraints: dict with constraints
+        N: number of time steps (int)
+        dt: time step (float)
+
+    Returns:
+        candidates: list of Candidate objects
+    """
+    p0_x = x0[0]
+    p0_y = x0[1]
+    v0 = x0[3]
+    a0 = 0 if len(x0) < 5 else x0[4]
+
+    # Physical limits
+    limits = {
+        'a_max': constraints['u_max'][0],
+        'a_min': constraints['u_min'][0],
+        'j_max': 1.0,
+        'j_min': -1.0
+    }
+
+    v_max = 20.0
+    v_min = 0.0
+    v_desired = scenario.v_desired
+
+    candidates = []
+    cand_id = 1
+
+    # Iterate over lateral intentions (lanes)
+    # Find current lane index (based on y-coordinate)
+    lane_centers = [0.0, -4.0, 4.0]  # Center, Right, Left
+    curr_lane_idx = min(range(len(lane_centers)), key=lambda i: abs(lane_centers[i] - p0_y))
+
+    # Define search directions: [current, left, right]
+    search_offsets = [0, 1, -1]
+
+    for offset in search_offsets:
+        target_lane_idx = curr_lane_idx + offset
+
+        # Check if lane exists
+        if target_lane_idx < 0 or target_lane_idx >= len(lane_centers):
+            continue
+
+        target_y = lane_centers[target_lane_idx]
+
+        # Define lateral action label
+        if offset == 0:
+            lat_action = 'Keep'
+        elif offset == 1:
+            lat_action = 'Left'
+        else:
+            lat_action = 'Right'
+
+        # Perception: find leading obstacle in target lane
+        has_lead, lead_obs = find_leading_obstacle(p0_x, target_y, constraints['obstacles'])
+
+        # Longitudinal mode A: reach desired speed (Cruise/Overtake)
+        P_cruise = target_velocity_solver(v0, a0, v_desired, limits)
+        traj_cruise, acc_cruise = discretize_trajectory(P_cruise, 'velocity', x0, target_y, N, dt)
+
+        candidates.append(Candidate(cand_id, f"{lat_action}_Cruise", traj_cruise, v_desired, acc_cruise, target_lane_idx))
+        cand_id += 1
+
+        # Longitudinal mode B: adapt to leading vehicle (Follow/Yield/Stop)
+        if has_lead:
+            v_lead = lead_obs.vx
+            p_lead = lead_obs.x
+            safe_dist = 10.0 + v_lead * 1.5  # Simple safety distance model
+
+            if v_lead > 1.0:
+                # B1: Leading vehicle moving -> match velocity
+                target_v = min(v_lead, v_desired)
+                P_follow = target_velocity_solver(v0, a0, target_v, limits)
+                traj_follow, acc_follow = discretize_trajectory(P_follow, 'velocity', x0, target_y, N, dt)
+
+                candidates.append(Candidate(cand_id, f"{lat_action}_Follow_V", traj_follow, target_v, acc_follow, target_lane_idx))
+                cand_id += 1
+            else:
+                # B2: Leading vehicle stationary -> position-based stop
+                target_pos = p_lead - safe_dist
+
+                if target_pos > p0_x:
+                    # Simplified position solver
+                    Pa = {'a': limits['a_min'], 'v_final': 0}
+                    tpb = (0 - v0) / limits['a_min']
+                    Pb = {'a': 0}
+                    tc = tpb
+
+                    solver_out = {
+                        'Pa': Pa,
+                        'Pb': Pb,
+                        'tpb': tpb,
+                        'tc': tc
+                    }
+
+                    traj_stop, acc_stop = discretize_trajectory(solver_out, 'position', x0, target_y, N, dt)
+
+                    candidates.append(Candidate(cand_id, f"{lat_action}_Stop", traj_stop, 0, acc_stop, target_lane_idx))
+                    cand_id += 1
+
+    return candidates
